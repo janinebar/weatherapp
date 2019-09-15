@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">weatherapp</string>
     <string name="title_activity_maps">Map</string>
+    <string name="google_maps_key">AIzaSyDVrJPxByXeTsFiB7MJaq46_qDM8a8t1DQ</string>
 </resources>

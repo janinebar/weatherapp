@@ -2,16 +2,18 @@ package com.example.weatherapp;
 
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
 
 import com.android.volley.Request;
+import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
-import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -24,9 +26,14 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 
+
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
     private GoogleMap mMap;
+    private RequestQueue queue;
+    private TextView debug_json;
+    private double lat;
+    private double lng;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,6 +44,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
     }
+
 
 
     /**
@@ -53,18 +61,30 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap = googleMap;
 
         // Add a marker in Sydney and move the camera
-        LatLng sydney = new LatLng(-34, 151);
+        LatLng sydney = new LatLng(-32, 47);
         mMap.addMarker(new MarkerOptions().position(sydney).title("Marker in Sydney"));
         mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
     }
 
+    public void submitButton(View view){
+        mapSearch(view);
+        System.out.println(this.lat + " " + this.lng);
+    }
+
+    public void changeMap(LatLng location) {
+
+        // Add a marker in Sydney and move the camera
+        LatLng newLocation = location;
+        mMap.addMarker(new MarkerOptions().position(newLocation).title("Inputted location"));
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(newLocation));
+    }
+
     /**
      * Anna
-     * @param View
+     * @param view
      * @return
      */
-    public LatLng mapSearch(View view){
-        LatLng result = new LatLng(0,0);
+    public void mapSearch(View view){
 
         // get location string
         final TextView input_location = (TextView) findViewById(R.id.mapSearch);
@@ -73,35 +93,45 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         //Debug
         final TextView debug_input = (TextView) findViewById(R.id.textView);
-        final TextView debug_json = (TextView) findViewById(R.id.textView4);
+        debug_json = (TextView) findViewById(R.id.textView4);
         debug_input.setText(input);
         System.out.println("----------Button clicked-----");
 
         //turn into lat/lng
 
-        String url = "https://maps.googleapis.com/maps/api/geocode/json?address=Austin,+TX&key=AIzaSyDJiHyUAOjgFFWLfcrNSp14zr_dFmrZYnI";
+        String api = "AIzaSyDVrJPxByXeTsFiB7MJaq46_qDM8a8t1DQ";
+
+        String url = "https://maps.googleapis.com/maps/api/geocode/json?address=600+West+26&key="+api;
+        String url3 = "https://maps.googleapis.com/maps/api/geocode/json?address=1600+Amphitheatre+Parkway+Mountain+View,+CA&key=AIzaSyDJiHyUAOjgFFWLfcrNSp14zr_dFmrZYnI";
+        String url2 = "https://api.myjson.com/bins/par8d";
+
+
+        // Volley Request Stuff
+        queue = Volley.newRequestQueue(this);
 
         // Request a string response from the provided URL.
-        JsonArrayRequest jsonRequest = new JsonArrayRequest
-                (Request.Method.GET, url, null, new Response.Listener<JSONArray>() {
+        JsonObjectRequest jsonRequest = new JsonObjectRequest
+                (Request.Method.GET, url2, null, new Response.Listener<JSONObject>() {
 
                     //JSON Parser
                     @Override
-                    public void onResponse(JSONArray response) {
+                    public void onResponse(JSONObject response) {
 
                         // Process the JSON
                         try{
 
+                            JSONArray jsonArray = response.getJSONArray("results"); // the overall results
+                            debug_json.setText("worked");
+
+                            // Get lat and lng from json results
                             System.out.println(response.toString());
-                            debug_json.setText("Geocode successful");
 
-                            // Loop through the array elements
-                            for(int i=0;i<response.length();i++){
-                                // Get current json object
-                                JSONObject object = response.getJSONObject(i);
-                                System.out.println("-------------" + object.toString());
+                            JSONObject object = jsonArray.getJSONObject(0);
+                            JSONObject location = object.getJSONObject("geometry").getJSONObject("location");
+                            double lat = getLat(location);
+                            double lng = getLng(location);
+                            System.out.println("------------- INFO " + lat + " " + lng);
 
-                            }
                         }catch (JSONException e){
                             e.printStackTrace();
                         }
@@ -112,18 +142,38 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     //If error with request
                     @Override
                     public void onErrorResponse(VolleyError error) {
-                        debug_json.setText("url request error");
+                        debug_json.setText("error");
+                        Log.e("VOLLEY", error.getMessage());
 
                     }
                 });
 
+        queue.add(jsonRequest);
 
+    }
 
+    // Returns latitude
+    public double getLat(JSONObject location){
+        double latitude = 0;
+        try {
+             latitude = location.getDouble("lat");
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        this.lat = latitude;
+        return this.lat;
+    }
 
-        //put into map
-
-
-        return result;
+    // Returns longitude
+    public double getLng(JSONObject location){
+        double longitude = 0;
+        try {
+            longitude = location.getDouble("lng");
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        this.lng = longitude;
+        return this.lng;
     }
 
 }
