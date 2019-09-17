@@ -12,8 +12,10 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+import com.android.volley.toolbox.HttpResponse;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
+
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -25,6 +27,13 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 
 /***
@@ -33,10 +42,6 @@ import org.json.JSONException;
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
     private GoogleMap mMap;
-    private RequestQueue queue;
-    private TextView debug_json;
-    private double lat;
-    private double lng;
 
 
     @Override
@@ -48,7 +53,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
     }
-
 
 
     /**
@@ -70,247 +74,200 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
     }
 
-    public void submitButton(View view){
 
-        TextView input_location = (TextView) findViewById(R.id.mapSearch);
+    /***
+     * Submit button functionality
+     * @param view
+     */
+    public void submitButton(View view) {
+
+        submitThread findLocation = new submitThread();
+        findLocation.execute("");
 
     }
 
-    public void changeMap() {
+    private class submitThread extends AsyncTask<String, Void, String> {
 
-        // Add a marker in Sydney and move the camera
-        LatLng newLocation = new LatLng(30, -97);
-        mMap.addMarker(new MarkerOptions().position(newLocation).title("Inputted location"));
-        mMap.moveCamera(CameraUpdateFactory.newLatLng(newLocation));
-    }
+        String result = "";
+        double lat = 0;
+        double lng = 0;
 
-    private class submitThread extends AsyncTask<String, Void, String>
-    {
+        //Location search bar
+        final TextView searchBar = (TextView) findViewById(R.id.mapSearch);
+
+        // Weather textBoxes
+        final TextView tempBox = (TextView) findViewById(R.id.temp);
+        final TextView precipBox = (TextView) findViewById(R.id.precip);
+        final TextView humidBox = (TextView) findViewById(R.id.humidity);
+        final TextView windBox = (TextView) findViewById(R.id.windspeed);
+
+        // initialize weather data
+        double temp = 0;
+        double humidity = 0;
+        double precip = 0;
+        double windsp = 0;
+
         @Override
-        protected String doInBackground(String... params){
-            return "string";
-        }
+        protected String doInBackground(String... params) {
 
-        public void mapSearch(View view){
-
-            // get location string
-            final TextView input_location = (TextView) findViewById(R.id.mapSearch);
-            //final String input = input_location.getText().toString();
-            final String input = "Austin,+TX";
-
-            //Debug
-            final TextView debug_input = (TextView) findViewById(R.id.textView);
-            debug_json = (TextView) findViewById(R.id.textView4);
-            debug_input.setText(input);
-            System.out.println("----------Button clicked-----");
-
-            //turn into lat/lng
-
+            HttpURLConnection connection = null;
             String api = "AIzaSyDVrJPxByXeTsFiB7MJaq46_qDM8a8t1DQ";
+            BufferedReader reader = null;
+            String coordinates = "";
 
-            String url = "https://maps.googleapis.com/maps/api/geocode/json?address=600+West+26th+Street+Austin,+TX&key="+api;
-            String url3 = "https://maps.googleapis.com/maps/api/geocode/json?address=1600+Amphitheatre+Parkway+Mountain+View,+CA&key="+api;
-            String url2 = "https://api.myjson.com/bins/par8d";
+            String originalInput = searchBar.getText().toString();
+            String[] inputArr = originalInput.split(" ");
+            String input = "";
+            for(int i = 0; i < inputArr.length; i++){
+                input += inputArr[i] + "+";
+            }
 
 
-            // Volley Request Stuff
-            queue = Volley.newRequestQueue(getActivity().getApplicationContext());
 
-            // Request a string response from the provided URL.
-            JsonObjectRequest jsonRequest = new JsonObjectRequest
-                    (Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
+            try {
 
-                        //JSON Parser
-                        @Override
-                        public void onResponse(JSONObject response) {
+                // Sends Geocode API request
+                URL url = new URL("https://maps.googleapis.com/maps/api/geocode/json?address="+input+"&key=" + api);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.connect();
 
-                            // Process the JSON
-                            try{
+                // Gets JSON Data
+                InputStream stream = connection.getInputStream();
 
-                                JSONArray jsonArray = response.getJSONArray("results"); // the overall results
-                                debug_json.setText("worked");
+                reader = new BufferedReader(new InputStreamReader(stream));
+                StringBuffer buffer = new StringBuffer();
 
-                                // Get lat and lng from json results
-                                System.out.println(response.toString());
+                while ((result = reader.readLine()) != null) {
+                    buffer.append(result + "\n");
+                    Log.d("Response: ", result); // line by line printing
+                }
 
-                                JSONObject object = jsonArray.getJSONObject(0);
-                                JSONObject location = object.getJSONObject("geometry").getJSONObject("location");
-                                lat = getLat(location);
-                                lng = getLng(location);
-                                System.out.println("------------- INFO " + lat + " " + lng);
+                //Parses JSON data
+                try {
+                    JSONObject response = new JSONObject(buffer.toString()); //from doInBackground
+                    JSONArray jsonArray = response.getJSONArray("results"); // the overall results
 
-                            }catch (JSONException e){
-                                e.printStackTrace();
-                            }
+                    // Get lat and lng from json results
+                    System.out.println(response.toString()); // one line response
 
-                        }
-                    }, new Response.ErrorListener() {
+                    JSONObject object = jsonArray.getJSONObject(0);
+                    JSONObject location = object.getJSONObject("geometry").getJSONObject("location");
+                    lat = location.getDouble("lat");
+                    lng = location.getDouble("lng");
+                    System.out.println("------------- INFO " + lat + " " + lng);
+                    coordinates = String.valueOf(lat) + " " + String.valueOf(lng);
 
-                        //If error with request
-                        @Override
-                        public void onErrorResponse(VolleyError error) {
-                            debug_json.setText("error");
-                            Log.e("VOLLEY", error.getMessage());
 
-                        }
-                    });
 
-            queue.add(jsonRequest);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
 
-        }
 
-    }
-//    public void mapSearch(View view){
-//
-//        // get location string
-//        final TextView input_location = (TextView) findViewById(R.id.mapSearch);
-//        //final String input = input_location.getText().toString();
-//        final String input = "Austin,+TX";
-//
-//        //Debug
-//        final TextView debug_input = (TextView) findViewById(R.id.textView);
-//        debug_json = (TextView) findViewById(R.id.textView4);
-//        debug_input.setText(input);
-//        System.out.println("----------Button clicked-----");
-//
-//        //turn into lat/lng
-//
-//        String api = "AIzaSyDVrJPxByXeTsFiB7MJaq46_qDM8a8t1DQ";
-//
-//        String url = "https://maps.googleapis.com/maps/api/geocode/json?address=600+West+26th+Street+Austin,+TX&key="+api;
-//        String url3 = "https://maps.googleapis.com/maps/api/geocode/json?address=1600+Amphitheatre+Parkway+Mountain+View,+CA&key="+api;
-//        String url2 = "https://api.myjson.com/bins/par8d";
-//
-//
-//        // Volley Request Stuff
-//        queue = Volley.newRequestQueue(this);
-//
-//        // Request a string response from the provided URL.
-//        JsonObjectRequest jsonRequest = new JsonObjectRequest
-//                (Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
-//
-//                    //JSON Parser
-//                    @Override
-//                    public void onResponse(JSONObject response) {
-//
-//                        // Process the JSON
-//                        try{
-//
-//                            JSONArray jsonArray = response.getJSONArray("results"); // the overall results
-//                            debug_json.setText("worked");
-//
-//                            // Get lat and lng from json results
-//                            System.out.println(response.toString());
-//
-//                            JSONObject object = jsonArray.getJSONObject(0);
-//                            JSONObject location = object.getJSONObject("geometry").getJSONObject("location");
-//                            lat = getLat(location);
-//                            setLat(lat);
-//                            lng = getLng(location);
-//                            System.out.println("------------- INFO " + lat + " " + lng);
-//
-//                        }catch (JSONException e){
-//                            e.printStackTrace();
-//                        }
-//
-//                    }
-//                }, new Response.ErrorListener() {
-//
-//                    //If error with request
-//                    @Override
-//                    public void onErrorResponse(VolleyError error) {
-//                        debug_json.setText("error");
-//                        Log.e("VOLLEY", error.getMessage());
-//
-//                    }
-//                });
-//
-//        queue.add(jsonRequest);
-//
-//    }
-
-    public void weather(){
-
-        String darkSky_url = "https://api.darksky.net/forecast/8802f65c465beff5374ad280f538f4ec/30.2907524,-97.74349509999999";
-        JsonObjectRequest jsonRequest = new JsonObjectRequest
-                (Request.Method.GET, darkSky_url, null, new Response.Listener<JSONObject>() {
-
-                    //JSON Parser
-                    @Override
-                    public void onResponse(JSONObject response) {
-
-                        // Process the JSON
-                        try{
-
-//                            JSONArray jsonArray = response.getJSONArray("results"); // the overall results
-//                            debug_json.setText("worked");
-
-                            // Get lat and lng from json results
-                            System.out.println(response.toString());
-
-                            JSONObject object = response.getJSONObject("currently");
-//                            JSONObject location = object.getJSONObject("currently");
-                            double temp = object.getDouble("temperature");
-                            double humidity = object.getDouble("humidity");
-                            double precip = object.getDouble("precipProbability");
-                            double windsp = object.getDouble("windSpeed");
-//                            System.out.println(temp);
-//                            System.out.println(humidity);
-//                            System.out.println(precip);
-//                            System.out.println(windsp);
-
-                            //set textboxes
-                            final TextView tempBox = (TextView) findViewById(R.id.temp);
-                            tempBox.setText("Temperature: " + String.valueOf(temp));
-                            final TextView precipBox = (TextView) findViewById(R.id.precip);
-                            precipBox.setText("Precipitation: " + String.valueOf(precip));
-                            final TextView humidBox = (TextView) findViewById(R.id.humidity);
-                            humidBox.setText("Humidity: " + String.valueOf(humidity));
-                            final TextView windBox = (TextView) findViewById(R.id.windspeed);
-                            windBox.setText("Temperature: " + String.valueOf(windsp));
-
-                        }catch (JSONException e){
-                            e.printStackTrace();
-                        }
-
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            // Closes Geocode API connections
+            finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+                try {
+                    if (reader != null) {
+                        reader.close();
                     }
-                }, new Response.ErrorListener() {
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
 
-                    //If error with request
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        debug_json.setText("error");
-                        Log.e("VOLLEY", error.getMessage());
+            }
 
+
+
+            // Weather Info
+            String darkSky_url = "https://api.darksky.net/forecast/8802f65c465beff5374ad280f538f4ec/" + lat + "," + lng;
+            HttpURLConnection connection2 = null;
+            BufferedReader reader2 = null;
+
+
+            try {
+
+                // Does Weather API Call
+                URL url = new URL(darkSky_url);
+                connection2 = (HttpURLConnection) url.openConnection();
+                connection2.connect();
+
+                // Gets Weather JSON Data
+                InputStream stream = connection2.getInputStream();
+
+                reader = new BufferedReader(new InputStreamReader(stream));
+                StringBuffer buffer2 = new StringBuffer();
+
+                while ((result = reader.readLine()) != null) {
+                    buffer2.append(result + "\n");
+                    Log.d("Response: ", result); // line by line printing
+                }
+
+                // Get lat and lng from json results
+                System.out.println(buffer2.toString());
+
+                // Parses Weather JSON Data
+                JSONObject response = new JSONObject(buffer2.toString());
+                JSONObject object = response.getJSONObject("currently");
+                temp = object.getDouble("temperature");
+                humidity = object.getDouble("humidity");
+                precip = object.getDouble("precipProbability");
+                windsp = object.getDouble("windSpeed");
+
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            // Closes weather connections
+            finally {
+                if (connection2 != null) {
+                    connection2.disconnect();
+                }
+                try {
+                    if (reader != null) {
+                        reader.close();
                     }
-                });
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
 
-        queue.add(jsonRequest);
-    }
+            }
 
-    // Returns latitude
-    public double getLat(JSONObject location){
-        double latitude = 0;
-        try {
-            latitude = location.getDouble("lat");
-        } catch (JSONException e) {
-            e.printStackTrace();
+
+            return coordinates;
         }
-        this.lat = latitude;
-        return this.lat;
-    }
 
-    // Returns longitude
-    public double getLng(JSONObject location){
-        double longitude = 0;
-        try {
-            longitude = location.getDouble("lng");
-        } catch (JSONException e) {
-            e.printStackTrace();
+        @Override
+        protected void onPostExecute(String result) {
+            System.out.println("--- done executing");
+            String lat = result.split(" ")[0];
+            String lng = result.split(" ")[1];
+
+            // add marker to map
+            LatLng newLocation = new LatLng(Double.parseDouble(lat), Double.parseDouble(lng));
+            mMap.clear();
+            mMap.addMarker(new MarkerOptions().position(newLocation).title("Inputted location"));
+            mMap.moveCamera(CameraUpdateFactory.newLatLng(newLocation));
+
+            //set textboxes
+            tempBox.setText("Temperature: " + String.valueOf(temp));
+            precipBox.setText("Precipitation: " + String.valueOf(precip));
+            humidBox.setText("Humidity: " + String.valueOf(humidity));
+            windBox.setText("Temperature: " + String.valueOf(windsp));
         }
-        this.lng = longitude;
-        return this.lng;
+
+
+
     }
-
-
 }
